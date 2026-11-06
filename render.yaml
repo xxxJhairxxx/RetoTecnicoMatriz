@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: qr-node-api
+    runtime: docker
+    dockerfilePath: ./node-api/Dockerfile
+    dockerContext: ./node-api
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: qr-demo
+      - key: PORT
+        value: 10000
+
+  - type: web
+    name: qr-go-api
+    runtime: docker
+    dockerfilePath: ./go-api/Dockerfile
+    dockerContext: ./go-api
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: qr-demo
+      - key: PORT
+        value: 10000
+      - key: NODE_API_URL
+        sync: false
+
+envVarGroups:
+  - name: qr-demo
+    envVars:
+      - key: JWT_SECRET
+        value: H7wvKqUHGt9hao5kRAgQxxyC32o6qiU3lAFjItNdwLY6t1-qNlqDo8cNVtoExxNn
+      - key: API_USER
+        value: demo
+      - key: API_PASSWORD
+        value: Qr-Demo-2026

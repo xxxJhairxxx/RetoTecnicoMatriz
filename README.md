@@ -97,6 +97,15 @@ idioma de quien evalúa.
 
 ## Despliegue
 
-Pensado para Google Cloud Run, un servicio por imagen: ambos son HTTP sin estado y escalan a
-cero. La API de Node se despliega con `--ingress internal` para reproducir el aislamiento que
-da `docker compose`, y los secretos van en Secret Manager.
+El [`render.yaml`](render.yaml) de la raíz despliega ambos servicios en Render desde este
+repositorio: dos servicios Docker que comparten el mismo `JWT_SECRET` a través de un grupo de
+variables de entorno. `NODE_API_URL` se introduce al crear el blueprint, con la URL que Render
+asigna a la API de Node.
+
+Una diferencia respecto al entorno local: el plan gratuito de Render no ofrece servicios
+privados, así que la API de estadísticas queda accesible públicamente en lugar de vivir solo en
+la red interna. Sigue protegida por JWT, pero el aislamiento de red que da `docker compose` se
+pierde. En un entorno de pago se resolvería con un *private service*.
+
+Para Google Cloud Run la equivalencia es directa: un servicio por imagen, los secretos en
+Secret Manager y la API de Node con `--ingress internal`, que sí reproduce el aislamiento.
