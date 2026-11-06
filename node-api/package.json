@@ -1,0 +1,15 @@
+{
+  "name": "reto-tecnico-node-api",
+  "version": "1.0.0",
+  "description": "API de estadisticas sobre las matrices Q y R devueltas por la API en Go",
+  "main": "src/server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

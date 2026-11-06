@@ -1,0 +1,25 @@
+services:
+  node-api:
+    build: ./node-api
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET en .env}
+      PORT: 3000
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  go-api:
+    build: ./go-api
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET en .env}
+      API_USER: ${API_USER:-demo}
+      API_PASSWORD: ${API_PASSWORD:?define API_PASSWORD en .env}
+      NODE_API_URL: http://node-api:3000
+      PORT: 8080
+    ports: ["8080:8080"]
+    depends_on:
+      node-api:
+        condition: service_healthy

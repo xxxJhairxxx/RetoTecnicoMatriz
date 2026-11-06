@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factorización QR</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1a1d21; --muted:#6b7280; --card:#fff; --line:#e3e6ea; --accent:#2563eb; --bad:#b91c1c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171a; --fg:#e8eaed; --muted:#9aa0a6; --card:#1d2125; --line:#2e3338; --accent:#60a5fa; --bad:#f87171; }
+  }
+  body { margin:0; padding:2rem 1rem; background:var(--bg); color:var(--fg);
+         font:15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 .25rem; }
+  p.sub { color:var(--muted); margin:0 0 1.5rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1.25rem; margin-bottom:1.25rem; }
+  label { display:block; font-weight:600; margin-bottom:.4rem; }
+  textarea { width:100%; min-height:7rem; padding:.6rem; border:1px solid var(--line); border-radius:6px;
+             background:var(--bg); color:var(--fg); font-family: ui-monospace, Consolas, monospace; font-size:14px; resize:vertical; }
+  button { margin-top:.75rem; padding:.55rem 1.1rem; border:0; border-radius:6px; background:var(--accent);
+           color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+  button[disabled] { opacity:.55; cursor:progress; }
+  .error { color:var(--bad); margin-top:.75rem; white-space:pre-wrap; }
+  .grid { display:grid; gap:1.25rem; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
+  table { border-collapse:collapse; font-family: ui-monospace, Consolas, monospace; font-size:13px; }
+  td, th { border:1px solid var(--line); padding:.3rem .55rem; text-align:right; }
+  h2 { font-size:1rem; margin:0 0 .6rem; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:.3rem 1rem; margin:0; font-size:14px; }
+  dt { color:var(--muted); }
+  dd { margin:0; font-family: ui-monospace, Consolas, monospace; }
+  [hidden] { display:none !important; }
+  .scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Factorización QR + estadísticas</h1>
+  <p class="sub">La API en Go factoriza la matriz (A = Q·R) y delega las estadísticas de Q y R a la API en Node.js.</p>
+
+  <form class="card" id="form">
+    <label for="matrix">Matriz (una fila por línea, valores separados por espacios o comas)</label>
+    <textarea id="matrix" spellcheck="false">12 -51 4
+6 167 -68
+-4 24 -41</textarea>
+    <button type="submit" id="submit">Calcular</button>
+    <p class="error" id="error" hidden></p>
+  </form>
+
+  <section id="results" hidden>
+    <div class="grid">
+      <div class="card"><h2>Q</h2><div class="scroll"><table id="q"></table></div></div>
+      <div class="card"><h2>R</h2><div class="scroll"><table id="r"></table></div></div>
+    </div>
+    <div class="card">
+      <h2>Estadísticas</h2>
+      <dl id="stats"></dl>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const CREDENTIALS = { username: 'demo', password: 'Qr-Demo-2026' };
+let token = null;
+
+function parseMatrix(text) {
+  const rows = text.trim().split('\n').map((line) => line.trim()).filter(Boolean)
+    .map((line) => line.split(/[\s,]+/).map(Number));
+  if (!rows.length) throw new Error('Escribe al menos una fila.');
+  if (rows.some((row) => row.some((n) => !Number.isFinite(n)))) throw new Error('Hay valores que no son números.');
+  return rows;
+}
+
+function renderTable(table, matrix) {
+  table.innerHTML = matrix
+    .map((row) => `<tr>${row.map((n) => `<td>${n.toFixed(4)}</td>`).join('')}</tr>`)
+    .join('');
+}
+
+function renderStats(stats) {
+  const diagonal = Object.entries(stats.diagonal).map(([k, v]) => `${k.toUpperCase()}: ${v ? 'sí' : 'no'}`).join(' · ');
+  $('stats').innerHTML = [
+    ['Valor máximo', stats.max], ['Valor mínimo', stats.min], ['Suma total', stats.sum],
+    ['Promedio', stats.average], ['Valores considerados', stats.count],
+    ['¿Alguna diagonal?', stats.anyDiagonal ? 'sí' : 'no'], ['Detalle', diagonal],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${typeof v === 'number' ? Number(v.toFixed(6)) : v}</dd>`).join('');
+}
+
+async function getToken() {
+  const res = await fetch('/api/v1/auth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(CREDENTIALS),
+  });
+  if (!res.ok) throw new Error('No se pudo autenticar contra la API.');
+  return (await res.json()).token;
+}
+
+$('form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  $('error').hidden = true;
+  $('submit').disabled = true;
+  try {
+    const matrix = parseMatrix($('matrix').value);
+    token ??= await getToken();
+    const res = await fetch('/api/v1/qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ matrix }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `La API respondió ${res.status}.`);
+    renderTable($('q'), data.q);
+    renderTable($('r'), data.r);
+    renderStats(data.statistics);
+    $('results').hidden = false;
+  } catch (err) {
+    $('error').textContent = err.message;
+    $('error').hidden = false;
+  } finally {
+    $('submit').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
