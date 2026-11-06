@@ -22,6 +22,7 @@
            color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
   button[disabled] { opacity:.55; cursor:progress; }
   .error { color:var(--bad); margin-top:.75rem; white-space:pre-wrap; }
+  .hint { color:var(--muted); margin:.75rem 0 0; font-size:13px; }
   .grid { display:grid; gap:1.25rem; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
   table { border-collapse:collapse; font-family: ui-monospace, Consolas, monospace; font-size:13px; }
   td, th { border:1px solid var(--line); padding:.3rem .55rem; text-align:right; }
@@ -44,6 +45,7 @@
 6 167 -68
 -4 24 -41</textarea>
     <button type="submit" id="submit">Calcular</button>
+    <p class="hint">La demo está en un plan gratuito: si los servicios estaban dormidos, el primer cálculo puede tardar hasta un minuto.</p>
     <p class="error" id="error" hidden></p>
   </form>
 
@@ -99,6 +101,7 @@ $('form').addEventListener('submit', async (event) => {
   event.preventDefault();
   $('error').hidden = true;
   $('submit').disabled = true;
+  $('submit').textContent = 'Calculando…';
   try {
     const matrix = parseMatrix($('matrix').value);
     token ??= await getToken();
@@ -118,6 +121,7 @@ $('form').addEventListener('submit', async (event) => {
     $('error').hidden = false;
   } finally {
     $('submit').disabled = false;
+    $('submit').textContent = 'Calcular';
   }
 });
 </script>

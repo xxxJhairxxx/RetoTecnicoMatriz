@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/jinfanzon/reto-tecnico/go-api/internal/matrix"
 )
+
+func TestMain(m *testing.M) {
+	retryDelay = 0
+	os.Exit(m.Run())
+}
 
 func TestFetchSendsMatricesAndReturnsStatistics(t *testing.T) {
 	var received map[string]matrix.Matrix
@@ -41,7 +47,9 @@ func TestFetchSendsMatricesAndReturnsStatistics(t *testing.T) {
 }
 
 func TestFetchPropagatesStatusError(t *testing.T) {
+	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
 		http.Error(w, "invalid matrix", http.StatusUnprocessableEntity)
 	}))
 	defer server.Close()
@@ -49,6 +57,81 @@ func TestFetchPropagatesStatusError(t *testing.T) {
 	_, err := NewClient(server.URL).Fetch(matrix.Matrix{{1}}, matrix.Matrix{{1}}, "Bearer xyz")
 	if err == nil || !strings.Contains(err.Error(), "422") {
 		t.Errorf("want an error mentioning 422, got %v", err)
+	}
+	if attempts != 1 {
+		t.Errorf("a client error must not be retried, got %d attempts", attempts)
+	}
+}
+
+func TestFetchRetriesWhileTheServiceWakesUp(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			w.Write([]byte("<html>502</html>"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"max":4,"min":1,"sum":10,"average":2.5,"count":4,"diagonal":{"q":false,"r":true},"anyDiagonal":true}`))
+	}))
+	defer server.Close()
+
+	out, err := NewClient(server.URL).Fetch(matrix.Matrix{{1}}, matrix.Matrix{{1}}, "Bearer xyz")
+	if err != nil {
+		t.Fatalf("unexpected error after retrying: %v", err)
+	}
+	if out.Sum != 10 {
+		t.Errorf("statistics decoded incorrectly: %+v", out)
+	}
+	if attempts != 3 {
+		t.Errorf("want 3 attempts, got %d", attempts)
+	}
+}
+
+func TestFetchGivesUpAfterMaxAttempts(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	_, err := NewClient(server.URL).Fetch(matrix.Matrix{{1}}, matrix.Matrix{{1}}, "Bearer xyz")
+	if err == nil || !strings.Contains(err.Error(), "502") {
+		t.Errorf("want an error mentioning 502, got %v", err)
+	}
+	if attempts != maxAttempts {
+		t.Errorf("want %d attempts, got %d", maxAttempts, attempts)
+	}
+}
+
+func TestFetchOmitsNonJSONErrorBodies(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		w.Write([]byte("<!DOCTYPE html><html><head><title>422</title></head></html>"))
+	}))
+	defer server.Close()
+
+	_, err := NewClient(server.URL).Fetch(matrix.Matrix{{1}}, matrix.Matrix{{1}}, "Bearer xyz")
+	if err == nil || strings.Contains(err.Error(), "DOCTYPE") {
+		t.Errorf("an HTML body must not leak into the error message, got %v", err)
+	}
+}
+
+func TestNewClientTrimsTrailingSlash(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"max":1,"min":1,"sum":1,"average":1,"count":1,"diagonal":{},"anyDiagonal":false}`))
+	}))
+	defer server.Close()
+
+	NewClient(server.URL+"/").Fetch(matrix.Matrix{{1}}, matrix.Matrix{{1}}, "Bearer xyz")
+	if path != "/api/v1/statistics" {
+		t.Errorf("path = %q, want %q", path, "/api/v1/statistics")
 	}
 }
 

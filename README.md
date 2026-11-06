@@ -102,10 +102,18 @@ repositorio: dos servicios Docker que comparten el mismo `JWT_SECRET` a través 
 variables de entorno. `NODE_API_URL` se introduce al crear el blueprint, con la URL que Render
 asigna a la API de Node.
 
-Una diferencia respecto al entorno local: el plan gratuito de Render no ofrece servicios
-privados, así que la API de estadísticas queda accesible públicamente en lugar de vivir solo en
-la red interna. Sigue protegida por JWT, pero el aislamiento de red que da `docker compose` se
-pierde. En un entorno de pago se resolvería con un *private service*.
+Dos diferencias respecto al entorno local, ambas impuestas por el plan gratuito:
+
+**No hay servicios privados.** La API de estadísticas queda accesible públicamente en lugar de
+vivir solo en la red interna. Sigue protegida por JWT, pero se pierde el aislamiento de red que
+da `docker compose`. En un plan de pago se resolvería con un *private service*.
+
+**Los servicios se duermen tras 15 minutos.** Al despertar, el proxy de Render devuelve `502`
+durante unos segundos antes de que el contenedor acepte conexiones. Por eso el cliente HTTP
+reintenta hasta 5 veces, espaciando 12 segundos, ante errores de red y respuestas `5xx`; un
+`4xx` no se reintenta, porque es un fallo del cliente y repetirlo daría el mismo resultado.
+Es una concesión al alojamiento gratuito, no una necesidad del diseño: en Cloud Run, con una
+instancia mínima activa, sobraría.
 
 Para Google Cloud Run la equivalencia es directa: un servicio por imagen, los secretos en
 Secret Manager y la API de Node con `--ingress internal`, que sí reproduce el aislamiento.
